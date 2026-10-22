@@ -151,11 +151,11 @@ PanBreak itself needs only Python 3.9–3.12 with `pysam`, `numpy` and `matplotl
 |---|---|---|
 | [pggb](https://github.com/pangenome/pggb) | `graph` | run through Docker / Singularity / Apptainer (default image is digest-pinned) or a native install |
 | [odgi](https://github.com/pangenome/odgi) | `graph` | taken from the pggb container unless `--odgi` or `$ODGI` is set |
-| minimap2 | `regions` (alignment mode) | only when assemblies have no annotation |
-| BLAST+ (`blastn`, `makeblastdb`) | `annotate` | optional; without it a 21-mer containment search is used |
-| samtools | example data, `workflow/subset_bams.sh` | |
+| [minimap2](https://github.com/lh3/minimap2) | `regions` (alignment mode) | only when assemblies have no annotation |
+| [BLAST+](https://www.ncbi.nlm.nih.gov/books/NBK279690/) (`blastn`, `makeblastdb`) | `annotate` | optional; without it a 21-mer containment search is used |
+| [samtools](https://github.com/samtools/samtools) | example data, `workflow/subset_bams.sh` | |
 
-pggb has no native macOS build. On a Mac, use Docker (e.g. `colima start --vm-type vz --vz-rosetta`)
+pggb has no native macOS build. On a Mac, use Docker (e.g. [colima](https://github.com/abiosoft/colima): `colima start --vm-type vz --vz-rosetta`)
 and make sure the project folder is mounted in the VM.
 
 ---
