@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panbreak"
+version = "0.1.0"
+description = "Local pangenome graph construction, bubble annotation and junction k-mer genotyping of structural variants and TE insertions from short-read alignments"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{name = "Yasin Kaya", email = "yyasinkkaya@gmail.com"}]
+dependencies = ["pysam>=0.21", "numpy>=1.22", "matplotlib>=3.5"]
+keywords = ["pangenome", "pggb", "structural variants", "transposable elements", "k-mer", "genotyping", "population genetics"]
+classifiers = ["Programming Language :: Python :: 3", "License :: OSI Approved :: MIT License", "Topic :: Scientific/Engineering :: Bio-Informatics"]
+
+[project.urls]
+Homepage = "https://github.com/yykaya/PanBreak"
+Issues = "https://github.com/yykaya/PanBreak/issues"
+
+[project.scripts]
+panbreak = "panbreak.cli:main"
+
+[tool.setuptools]
+packages = ["panbreak"]

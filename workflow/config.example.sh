@@ -1,0 +1,16 @@
+ASSEMBLIES=assemblies.tsv
+REF=ATG1
+GENE=geneX
+LOCUS=x
+FLANK=20000
+REF_GFF=annotation/ATG1.gff3
+TE_LIB=te_library.fa
+BAMS=bams/
+BAM_REF=reference/ATG1.fa
+BAM_REGION=chr1:20000-80000
+SAMPLES=samples.tsv
+GROUP_COL=population
+PLOIDY=2
+ENGINE=docker
+THREADS=8
+OUT=panbreak_out

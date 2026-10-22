@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "PanBreak: local pangenome graph bubble annotation and junction k-mer genotyping of structural variants and TE insertions from short reads"
+version: 0.1.0
+date-released: 2026-10-22
+license: MIT
+authors:
+  - family-names: Kaya
+    given-names: Yasin
+    email: yyasinkkaya@gmail.com
+    affiliation: "University of Cologne"
+repository-code: "https://github.com/yykaya/PanBreak"
+keywords:
+  - pangenome graph
+  - structural variants
+  - transposable elements
+  - k-mer genotyping
+  - population genetics

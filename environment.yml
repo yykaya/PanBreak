@@ -1,0 +1,16 @@
+name: panbreak
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.9,<3.13
+  - pysam>=0.21
+  - numpy>=1.22
+  - matplotlib>=3.5
+  - samtools>=1.17
+  - minimap2>=2.24
+  - blast>=2.13
+  - odgi>=0.8
+  - pip
+  - pip:
+      - -e .
