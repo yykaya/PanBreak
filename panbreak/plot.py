@@ -174,33 +174,32 @@ def flow(args, plt):
     samples = sorted(states)
     pop = {s: meta.get(s, {}).get(args.group_col, "all") for s in samples}
     pops = sorted(set(pop.values()))
-    pcol = {p: POP_PAL[i % len(POP_PAL)] for i, p in enumerate(pops)}
-    hap, match = {}, {}
-    hfile = os.path.join(args.popstats, "sample_haplotypes.tsv") if args.popstats else None
-    if hfile and os.path.exists(hfile):
-        for r in read_tsv(hfile):
-            hap[r["sample"]] = r["haplotype"] if r["complete"] == "yes" else "incomplete"
-            match[r["haplotype"]] = r["matching_assemblies"]
-    else:
-        for s in samples:
-            st = states[s]
-            hap[s] = "incomplete" if any(v == "nc" for v in st.values()) else ("+".join(b for b in bubbles if st.get(b) in ("alt", "het")) or "REF")
+    pal = POP_PAL if len(pops) <= len(POP_PAL) else [mc.to_hex(matplotlib.colormaps["tab20"](i % 20)) for i in range(len(pops))]
+    pcol = {p: pal[i % len(pal)] for i, p in enumerate(pops)}
+    asm_hap = defaultdict(list)
+    mfile = os.path.join(args.bubbles, "assembly_matrix.tsv")
+    if os.path.exists(mfile):
+        for r in read_tsv(mfile):
+            if all(r.get(b) in ("0", "1", "x") for b in bubbles):
+                asm_hap["+".join(b for b in bubbles if r[b] == "1") or "REF"].append(r["genome"])
+    hap = {s: "+".join(b for b in bubbles if states[s].get(b) in ("alt", "het")) or "REF" for s in samples}
     counts = defaultdict(int)
     for s in samples:
         counts[hap[s]] += 1
-    minor = max(2, int(0.01 * len(samples)))
+    top = sorted(counts, key=lambda h: -counts[h])[:args.max_haplotypes]
     for s in samples:
-        if hap[s] != "incomplete" and counts[hap[s]] < minor:
-            hap[s] = "rare / heterozygous"
+        if hap[s] not in top or counts[hap[s]] < 2:
+            hap[s] = "other haplotypes"
     hcount = defaultdict(int)
     for s in samples:
         hcount[hap[s]] += 1
-    haps = sorted(hcount, key=lambda h: (h in ("rare / heterozygous", "incomplete"), -hcount[h], h))
+    haps = sorted(hcount, key=lambda h: (h == "other haplotypes", -hcount[h], h))
+    match = {h: asm_hap.get(h, []) for h in haps}
     rank = {h: i for i, h in enumerate(haps)}
     key = {s: (rank[hap[s]], pops.index(pop[s]), s) for s in samples}
     cols = [("pop", None)] + [("bub", b) for b in bubbles] + [("hap", None)]
     unit = 1.0
-    pad = max(2.0, 0.03 * len(samples))
+    pad = max(1.5, 0.25 * len(samples) / max(8, len(pops), min(len(haps), 20)))
     w = 0.16
     ypos, nodes = [], []
     for ci, (kind, b) in enumerate(cols):
@@ -228,6 +227,7 @@ def flow(args, plt):
             colors.append(mc.to_rgba(pcol[pop[s]], 0.38))
     fig, ax = plt.subplots(figsize=(args.width / 25.4, max(70, min(150, 40 + 0.4 * len(haps) * 6)) / 25.4))
     ax.add_collection(PolyCollection(polys, facecolors=colors, edgecolors="none", zorder=1))
+    last_lab = [-1e9]
     for ci, kind, b, g, y, h in nodes:
         if kind == "pop":
             fc, ec = pcol[g], "none"
@@ -245,13 +245,17 @@ def flow(args, plt):
             fc, ec = "white", "#9E9E9E"
         ax.add_patch(Rectangle((ci - w / 2, y), w, h, fc=fc, ec=ec, lw=0.4, zorder=3))
         if kind == "pop":
-            ax.text(ci - w / 2 - 0.06, y + h / 2, f"{g}\nn = {int(h / unit)}", ha="right", va="center", fontsize=6.2, color=pcol[g])
+            if h >= 0.012 * height:
+                ax.text(ci - w / 2 - 0.06, y + h / 2, f"{g} ({int(h / unit)})", ha="right", va="center",
+                        fontsize=6.0 if len(pops) <= 8 else 4.8, color=pcol[g])
         elif kind == "hap":
-            m = match.get(g, ".")
-            lab = g if g in ("rare / heterozygous", "incomplete") else (f"{m.split(',')[0]}-like" if m not in (".", "") else "unmatched")
-            detail = "" if g in ("rare / heterozygous", "incomplete", "REF") else g
-            ax.text(ci + w / 2 + 0.06, y + h / 2, f"{lab} ({int(h / unit)})" + (f"  {detail}" if detail else ""),
-                    ha="left", va="center", fontsize=5.4, color="#252525")
+            m = match.get(g, [])
+            lab = g if g == "other haplotypes" else (f"{m[0]}-like" + (f" +{len(m) - 1}" if len(m) > 1 else "") if m else "no assembly match")
+            detail = "" if g in ("other haplotypes", "REF") else g
+            if h >= 0.008 * height and y + h / 2 - last_lab[0] >= 0.022 * height:
+                last_lab[0] = y + h / 2
+                ax.text(ci + w / 2 + 0.06, y + h / 2, f"{lab} ({int(h / unit)})" + (f"  {detail}" if detail else ""),
+                        ha="left", va="center", fontsize=5.4 if len(haps) <= 12 else 4.6, color="#252525")
         elif g in ("alt", "het") and h >= 3 * unit:
             ax.text(ci, y + h / 2, str(int(h / unit)), ha="center", va="center", fontsize=4.8, color="white", rotation=90, zorder=4)
     for ci, (kind, b) in enumerate(cols):
@@ -261,16 +265,16 @@ def flow(args, plt):
             sz = f"{size / 1000:.1f} kb" if size >= 1000 else f"{size} bp"
             ax.text(ci, -pad * 0.8, f"{b}\n{bi['type']}\n{sz}", ha="center", va="bottom", fontsize=5.6, color=bubble_colour(bi), linespacing=1.0)
         else:
-            ax.text(ci + (0 if kind == "pop" else 0.1), -pad * 0.8, "population" if kind == "pop" else "locus haplotype\n(assembly match)",
-                    ha="center" if kind == "pop" else "left", va="bottom", fontsize=5.8, fontweight="bold")
+            ax.text(ci + (w / 2 if kind == "pop" else 0.1), -pad * 0.8, "population" if kind == "pop" else "locus haplotype\n(assembly match)",
+                    ha="right" if kind == "pop" else "left", va="bottom", fontsize=5.8, fontweight="bold")
     ax.set_xlim(-1.0, len(cols) + 1.4)
     ax.set_ylim(height + pad, -pad * 5.5)
     ax.axis("off")
-    handles = [Patch(facecolor=pcol[p], label=p, alpha=0.7) for p in pops]
+    handles = [Patch(facecolor=pcol[p], label=p.replace("_", " "), alpha=0.7) for p in pops]
     handles += [Patch(facecolor="#7F7F7F", label="alternative (class colour)"), Patch(facecolor="#C8C8C8", label="heterozygous (light)"),
                 Patch(facecolor=CALL_COL["other"], label="overlapping allele"), Patch(facecolor="#BDBDBD", label="reference"),
                 Patch(facecolor="white", edgecolor="#9E9E9E", label="no call")]
-    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=min(8, len(handles)), frameon=False, fontsize=5.6,
+    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0), ncol=min(8, len(handles)), frameon=False, fontsize=5.6 if len(pops) <= 8 else 5.0,
               handlelength=1.2, columnspacing=1.0)
     save(fig, args.out, "haplotype_flow", args.formats)
     plt.close(fig)
@@ -330,8 +334,13 @@ def graph_layout(args, plt):
                 xc = x0[c] if co == "+" else x0[c] + L(c)
                 if abs(xc - xa) > 1:
                     edges.append((xa, xc, users.get(frozenset((a, c)), set())))
-    fig = plt.figure(figsize=(args.width / 25.4, 110 / 25.4))
-    ax = fig.add_axes([0.07, 0.08, 0.91, 0.86])
+    names = sorted(g.paths, key=lambda p: (g.info[p]["sample"] != args.ref, p))
+    top_mm, row_mm = 66, (2.6 if len(names) <= 12 else 1.5)
+    path_mm = max(18, min(170, len(names) * row_mm))
+    fig = plt.figure(figsize=(args.width / 25.4, (top_mm + path_mm + 12) / 25.4))
+    gs = fig.add_gridspec(2, 1, height_ratios=[top_mm, path_mm], hspace=0.04, left=0.09, right=0.98, top=0.95, bottom=0.1 * 80 / (top_mm + path_mm + 12))
+    ax = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1], sharex=ax)
     kb = 1000.0
     th = np.linspace(0, np.pi, 50)
     segs, cols, lws, apex = [], [], [], {}
@@ -394,41 +403,43 @@ def graph_layout(args, plt):
         reg = next((r for r in read_tsv(args.regions) if r["genome"] == args.ref), None) if args.regions else None
         models = load_models(args.gff, reg, ref.contig, ref.offset, len(ref.seq))
     gy = -1.55
-    for m in models:
+    for i, m in enumerate(sorted(models, key=lambda m: gx(m["start"]))):
         a, e = gx(m["start"]), gx(m["end"])
         ax.plot([min(a, e) / kb, max(a, e) / kb], [gy, gy], color="#525252", lw=0.7, zorder=3)
         for s0, t0 in m["exons"]:
             ea, eb = gx(s0), gx(t0)
             ax.plot([min(ea, eb) / kb, max(ea, eb) / kb], [gy, gy], color="#252525", lw=3.2, solid_capstyle="butt", zorder=4)
-        ax.text(min(a, e) / kb, gy - 0.2, m["id"], fontsize=5.8, style="italic", va="top")
-    names = sorted(g.paths, key=lambda p: (g.info[p]["sample"] != args.ref, p))
-    py0 = -2.3
+        ax.text(min(a, e) / kb, gy - 0.2 - (0.32 if i % 2 else 0), m["id"], fontsize=5.4 if len(models) <= 6 else 4.6, style="italic", va="top")
+    rowfont = 5.6 if len(names) <= 20 else max(3.0, 5.6 * 20 / len(names) ** 0.95)
     for k, p in enumerate(names):
-        y = py0 - k * 0.36
         visits = defaultdict(int)
         for n, o in g.paths[p]:
             visits[n] += 1
-        ax.add_collection(LineCollection([[(x0[n] / kb, y), ((x0[n] + L(n)) / kb, y)] for n in visits],
-                                         colors=["#111111" if visits[n] > 1 else POP_PAL[k % len(POP_PAL)] for n in visits],
-                                         linewidths=3.0, zorder=3))
-        ax.text(-0.01 * total / kb, y, g.info[p]["sample"], ha="right", va="center", fontsize=5.6)
+        ax2.add_collection(LineCollection([[(x0[n] / kb, -k), ((x0[n] + L(n)) / kb, -k)] for n in visits],
+                                          colors=["#111111" if visits[n] > 1 else POP_PAL[k % len(POP_PAL)] for n in visits],
+                                          linewidths=max(1.0, min(3.0, 110 / max(len(names), 1))), zorder=3))
+        ax2.text(-0.01 * total / kb, -k, g.info[p]["sample"], ha="right", va="center", fontsize=rowfont)
     lx = -0.01 * total / kb
-    for y, t, bold in ((1.2, "edges\nforward", False), (0, "nodes", True), (-0.75, "edges\nbackward", False), (gy, "genes", False),
-                       (py0 + 0.32, "paths", True)):
+    for y, t, bold in ((1.2, "edges\nforward", False), (0, "nodes", True), (-0.75, "edges\nbackward", False), (gy, "genes", False)):
         ax.text(lx, y, t, ha="right", va="center", fontsize=5.8 if bold else 5.4, fontweight="bold" if bold else "normal")
+    ax2.text(-0.075 * total / kb, 1.2, "paths", ha="left", va="bottom", fontsize=5.8, fontweight="bold")
     ax.set_xlim(-0.075 * total / kb, total / kb * 1.01)
-    ax.set_ylim(py0 - len(names) * 0.36, max([p[1] for p in placed] + [2.6]) + 0.35)
-    ax.set_yticks([])
-    for sp in ("left", "right", "top"):
-        ax.spines[sp].set_visible(False)
-    ax.set_xlabel("sorted graph coordinate (kb; odgi sort -p Ygs)")
+    ax.set_ylim(gy - 1.0, max([p[1] for p in placed] + [2.6]) + 0.35)
+    ax2.set_ylim(-len(names) + 0.4, 1.6)
+    for a_ in (ax, ax2):
+        a_.set_yticks([])
+        for sp in ("left", "right", "top"):
+            a_.spines[sp].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.tick_params(axis="x", bottom=False, labelbottom=False)
+    ax2.set_xlabel("sorted graph coordinate (kb; odgi sort -p Ygs)")
     sm = matplotlib.cm.ScalarMappable(cmap=cmap, norm=mc.Normalize(0, npath))
-    cax = fig.add_axes([0.80, 0.955, 0.15, 0.012])
+    cax = fig.add_axes([0.80, 0.965, 0.15, 0.008])
     cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
     cb.set_label("paths per node", fontsize=5.5, labelpad=1)
     cb.ax.tick_params(labelsize=5, length=1.5)
     cb.outline.set_linewidth(0.3)
-    ax.text(0.0, 1.0, "coloured bar on nodes: sequence private to a bubble's carriers; black path segments: node visited more than once",
+    ax.text(0.0, 1.04, "coloured bar on nodes: sequence private to a bubble's carriers; black path segments: node visited more than once",
             transform=ax.transAxes, ha="left", va="top", fontsize=5.2, color="#555555")
     save(fig, args.out, "graph_layout", args.formats)
     plt.close(fig)

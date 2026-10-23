@@ -144,11 +144,12 @@ def cluster_events(events, tol, min_ratio, min_jaccard):
             hit = c
             break
         if hit is None:
-            clusters.append({"type": e["type"], "a": e["a"], "b": e["b"], "members": [e], "kmers": e["kmers"]})
+            clusters.append({"type": e["type"], "a": e["a"], "b": e["b"], "alt_len": e["alt_len"], "members": [e], "kmers": e["kmers"]})
         else:
             hit["members"].append(e)
             hit["a"] = int(statistics.median(m["a"] for m in hit["members"]))
             hit["b"] = int(statistics.median(m["b"] for m in hit["members"]))
+            hit["alt_len"] = int(statistics.median(m["alt_len"] for m in hit["members"]))
     return clusters
 
 

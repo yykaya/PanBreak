@@ -44,7 +44,7 @@ def parser():
     g.add_argument("--regions", help="regions.tsv from 'regions' (needed for --trim-up/--trim-down)")
     g.add_argument("--trim-up", type=int, help="keep this many bp upstream of the gene in every path")
     g.add_argument("--trim-down", type=int, help="keep this many bp downstream of the gene in every path")
-    g.add_argument("--extend", nargs="*", default=[], metavar="GENOME=BP", help="extra upstream bp for single genomes (e.g. tandem copies)")
+    g.add_argument("--extend", nargs="*", default=[], metavar="GENOME=BP", help="extra downstream bp for single genomes (e.g. tandem copies beyond the gene)")
     g.add_argument("--odgi", help="odgi binary (default: from the container, or PATH with --engine native)")
     g.add_argument("--layout", action="store_true", help="also compute a 2D layout and drawing")
     g.add_argument("--skip-pggb", action="store_true", help="reuse an existing pggb/ output")
@@ -138,6 +138,7 @@ def parser():
     pl.add_argument("-c", "--group-col", default="population")
     pl.add_argument("--width", type=float, default=180, help="locus plot width in mm [180]")
     pl.add_argument("--height", type=float, default=80, help="locus plot height in mm [80]")
+    pl.add_argument("--max-haplotypes", type=int, default=12, help="haplotypes shown in the flow plot; the rest are pooled [12]")
     pl.add_argument("--formats", nargs="+", default=["png", "pdf"])
     pl.add_argument("-o", "--out", required=True)
     return p

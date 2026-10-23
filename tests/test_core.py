@@ -25,6 +25,7 @@ def toy_gfa(path):
         fh.write("P\tDEL#1#DEL_x\t1+,3+,5+\t*\n")
         fh.write("P\tINS#1#INS_x\t1+,2+,3+,4+,5+\t*\n")
         fh.write("P\tDUP#1#DUP_x\t1+,2+,3+,2+,3+,5+\t*\n")
+        fh.write("P\tINS2#1#INS2_x\t1+,2+,3+,4+,5+\t*\n")
     return nodes
 
 
@@ -67,6 +68,15 @@ class TestGraph(unittest.TestCase):
             self.assertEqual([(e["type"], e["a"], e["b"]) for e in ev["DEL"]], [("DEL", 30, 150)])
             self.assertEqual([(e["type"], e["alt_len"]) for e in ev["INS"]], [("INS", 150)])
             self.assertEqual([e["type"] for e in ev["DUP"]], ["DUP"])
+            from panbreak.bubbles import cluster_events, kmer_set
+            evs = []
+            for p in g.paths:
+                s, es, span, bm = walk(g, ref, p, 50)
+                for e in es:
+                    e["kmers"] = kmer_set(s[e["i0"]:e["i1"]])
+                    evs.append(e)
+            cl = cluster_events(evs, 50, 0.8, 0.3)
+            self.assertEqual(sorted((c["type"], len(c["members"])) for c in cl), [("DEL", 1), ("DUP", 1), ("INS", 2)])
 
 
 class TestModel(unittest.TestCase):

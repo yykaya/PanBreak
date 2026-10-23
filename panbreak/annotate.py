@@ -143,9 +143,10 @@ def context(models, s, e, promoter, downstream):
                 lab.append(f"{dn} bp downstream of TES")
         if c:
             cats.append(c)
-            hits.append(f"{m['id']}: {', '.join(dict.fromkeys(lab))}" if lab else m["id"])
+            hits.append((not m["cds"], rank[c], f"{m['id']}: {', '.join(dict.fromkeys(lab))}" if lab else m["id"]))
     cat = min(cats, key=lambda x: rank[x]) if cats else "intergenic"
-    return cat, "; ".join(hits) if hits else "intergenic", best_tss
+    hits.sort(key=lambda h: (h[0], h[1]))
+    return cat, "; ".join(h[2] for h in hits) if hits else "intergenic", best_tss
 
 
 def te_name_class(name):
@@ -425,7 +426,8 @@ def annotate(args):
         else:
             r["sv_class"] = "replacement" + ("" if ac["class"] == "unclassified" else f" by {ac['class']}")
         size = int(r["alt_len"]) if t == "INS" else int(r["ref_len"])
-        where = detail.split(": ", 1)[1] if ": " in detail else detail
+        first = detail.split("; ")[0]
+        where = first.split(": ", 1)[1] if ": " in first and len(models) == 1 else first.replace(": ", " ")
         r["label"] = f"{size_str(size)} {r['sv_class']} ({where})"
     for r in rows:
         r["linked"] = "."
