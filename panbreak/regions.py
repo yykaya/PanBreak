@@ -10,9 +10,16 @@ GENE_TYPES = {"gene", "mRNA", "transcript", "ncRNA_gene", "pseudogene", "lnc_RNA
 def gff_attrs(text):
     out = {}
     for item in text.strip().strip(";").split(";"):
+        item = item.strip()
+        if not item:
+            continue
         if "=" in item:
             k, v = item.split("=", 1)
-            out[k.strip()] = v.strip()
+        elif " " in item:
+            k, v = item.split(" ", 1)
+        else:
+            continue
+        out[k.strip()] = v.strip().strip('"')
     return out
 
 

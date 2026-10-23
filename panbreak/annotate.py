@@ -55,17 +55,20 @@ def load_models(gff, region_row, contig, offset, length):
     genes, tx_gene, parts = {}, {}, defaultdict(list)
     for t, s, e, st, a in feats:
         if t in ("gene", "ncRNA_gene", "pseudogene", "transposable_element_gene"):
-            gid = a.get("ID", a.get("Name"))
-            genes[gid] = {"id": a.get("Name", gid), "start": s, "end": e, "strand": st, "tx": None}
+            gid = a.get("ID") or a.get("gene_id") or a.get("Name")
+            genes[gid] = {"id": a.get("Name") or a.get("gene_id") or gid, "start": s, "end": e, "strand": st, "tx": None}
     for t, s, e, st, a in feats:
         if t in ("mRNA", "transcript", "lnc_RNA", "ncRNA", "tRNA", "miRNA"):
-            g = a.get("Parent", "").split(",")[0]
-            if g in genes and genes[g]["tx"] is None:
-                genes[g]["tx"] = a.get("ID")
-                tx_gene[a.get("ID")] = g
+            g = (a.get("Parent") or a.get("gene_id") or "").split(",")[0]
+            tids = [x for x in (a.get("ID"), a.get("transcript_id")) if x]
+            if g in genes and genes[g]["tx"] is None and tids:
+                genes[g]["tx"] = tids[0]
+                for x in tids:
+                    tx_gene[x] = g
     for t, s, e, st, a in feats:
         if t in ("exon", "CDS", "five_prime_UTR", "three_prime_UTR"):
-            for p in a.get("Parent", "").split(","):
+            keys = [a["transcript_id"]] if a.get("transcript_id") else a.get("Parent", "").split(",")
+            for p in keys:
                 if p in tx_gene:
                     parts[tx_gene[p]].append((t, s, e))
     models = []
