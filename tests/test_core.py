@@ -1,7 +1,11 @@
+import csv
+import io
 import os
+import random
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -27,6 +31,38 @@ def toy_gfa(path):
         fh.write("P\tDUP#1#DUP_x\t1+,2+,3+,2+,3+,5+\t*\n")
         fh.write("P\tINS2#1#INS2_x\t1+,2+,3+,4+,5+\t*\n")
     return nodes
+
+
+def random_locus(d):
+    rng = random.Random(7)
+    seq = lambda n: "".join(rng.choice("ACGT") for _ in range(n))
+    nodes = {"1": seq(300), "2": seq(400), "3": seq(300), "4": seq(350), "5": seq(300)}
+    paths = {"REF": "1 2 3 5", "DEL": "1 3 5", "INS": "1 2 3 4 5", "INS2": "1 2 3 4 5"}
+    gfa = os.path.join(d, "locus.gfa")
+    with open(gfa, "w") as fh:
+        fh.write("H\tVN:Z:1.0\n")
+        for n, s in nodes.items():
+            fh.write(f"S\t{n}\t{s}\n")
+        for g, p in paths.items():
+            fh.write(f"P\t{g}#1#{g}_x\t{','.join(x + '+' for x in p.split())}\t*\n")
+    return gfa, {g: "".join(nodes[x] for x in p.split()) for g, p in paths.items()}
+
+
+def write_reads(path, sample, haplotypes, length=100, step=4):
+    import pysam
+    header = {"HD": {"VN": "1.6", "SO": "unsorted"}, "SQ": [{"SN": "chr1", "LN": 10000}], "RG": [{"ID": sample, "SM": sample}]}
+    with pysam.AlignmentFile(path, "wb", header=header) as out:
+        i = 0
+        for s in haplotypes:
+            for st in range(0, len(s) - length, step):
+                r = pysam.AlignedSegment(out.header)
+                r.query_name = f"r{i}"
+                r.query_sequence = s[st:st + length] if i % 2 else rc(s[st:st + length])
+                r.flag = 4
+                r.query_qualities = pysam.qualitystring_to_array("I" * length)
+                r.set_tag("RG", sample)
+                out.write(r)
+                i += 1
 
 
 class TestSequence(unittest.TestCase):
@@ -103,6 +139,40 @@ class TestPopgen(unittest.TestCase):
         self.assertEqual(bh([0.01, 0.04, 0.5]), [0.03, 0.06, 0.5])
         num, den = hudson(0.9, 40, 0.1, 40)
         self.assertGreater(num / den, 0.6)
+
+
+class TestEndToEnd(unittest.TestCase):
+    def test_bubbles_kmers_genotype(self):
+        from panbreak.cli import main
+        with tempfile.TemporaryDirectory() as d:
+            gfa, hap = random_locus(d)
+            bams = os.path.join(d, "bams")
+            os.makedirs(bams)
+            for sample, haps in {"s_ref": ["REF", "REF"], "s_del": ["DEL", "DEL"], "s_het": ["REF", "DEL"], "s_ins": ["INS", "REF"]}.items():
+                write_reads(os.path.join(bams, sample + ".bam"), sample, [hap[h] for h in haps])
+            main(["bubbles", "-g", gfa, "-r", "REF", "-o", os.path.join(d, "b")])
+            main(["kmers", "-b", os.path.join(d, "b"), "-t", "1"])
+            main(["genotype", "-k", os.path.join(d, "b"), "-B", bams, "-t", "1", "-o", os.path.join(d, "g")])
+            with open(os.path.join(d, "b", "bubbles.tsv")) as fh:
+                types = {r["bubble"]: r["type"] for r in csv.DictReader(fh, delimiter="\t")}
+            self.assertEqual(sorted(types.values()), ["DEL", "INS"])
+            with open(os.path.join(d, "g", "genotypes.tsv")) as fh:
+                gt = {(r["sample"], types[r["bubble"]]): (r["GT"], r["FT"]) for r in csv.DictReader(fh, delimiter="\t")}
+            expect = {("s_ref", "DEL"): "0/0", ("s_del", "DEL"): "1/1", ("s_het", "DEL"): "0/1", ("s_ins", "DEL"): "0/0",
+                      ("s_ref", "INS"): "0/0", ("s_del", "INS"): "0/0", ("s_het", "INS"): "0/0", ("s_ins", "INS"): "0/1"}
+            self.assertEqual({k: v[0] for k, v in gt.items()}, expect)
+            self.assertTrue(all(v[1] == "PASS" for v in gt.values()))
+            self.assertTrue(os.path.exists(os.path.join(d, "g", "genotypes.vcf.gz")))
+
+    def test_check(self):
+        from panbreak.cli import main
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            main(["check"])
+        self.assertIn("pysam", buf.getvalue())
+        with self.assertRaises(SystemExit):
+            with redirect_stdout(io.StringIO()):
+                main(["check", "--require", "no-such-tool"])
 
 
 if __name__ == "__main__":

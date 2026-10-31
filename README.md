@@ -1,8 +1,9 @@
 # PanBreak
 
 [![tests](https://github.com/yykaya/PanBreak/actions/workflows/tests.yml/badge.svg)](https://github.com/yykaya/PanBreak/actions/workflows/tests.yml)
-[![version](https://img.shields.io/badge/version-0.1.0-informational)](https://github.com/yykaya/PanBreak/releases)
-[![python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![conda](https://github.com/yykaya/PanBreak/actions/workflows/conda.yml/badge.svg)](https://github.com/yykaya/PanBreak/actions/workflows/conda.yml)
+[![version](https://img.shields.io/badge/version-0.1.1-informational)](https://github.com/yykaya/PanBreak/releases)
+[![python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![conda](https://img.shields.io/badge/install-conda%20environment-44A833?logo=anaconda&logoColor=white)](environment.yml)
 [![graph](https://img.shields.io/badge/graph-pggb%20%7C%20odgi-6f42c1)](https://github.com/pangenome/pggb)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -143,17 +144,37 @@ python -m pip install -e .
 
 The conda environment (`environment.yml`) resolves on Linux (x86-64) and macOS (x86-64 and
 arm64) from conda-forge and bioconda. It provides Python, pysam, numpy, matplotlib, samtools,
-minimap2, BLAST+ and odgi. pggb is not part of the environment; run it from its container (below).
+minimap2, BLAST+ and odgi. pggb is not part of the environment; run it from its container or, on
+Linux, install it from bioconda (below).
 
-PanBreak itself needs only Python 3.9–3.12 with `pysam`, `numpy` and `matplotlib`. External tools:
+PanBreak itself needs only Python 3.10–3.13 with `pysam`, `numpy` and `matplotlib`. External tools:
 
 | Tool | Used by | Notes |
 |---|---|---|
-| [pggb](https://github.com/pangenome/pggb) | `graph` | run through Docker / Singularity / Apptainer (default image is digest-pinned) or a native install |
-| [odgi](https://github.com/pangenome/odgi) | `graph` | taken from the pggb container unless `--odgi` or `$ODGI` is set |
+| [pggb](https://github.com/pangenome/pggb) | `graph` | run through Docker / Singularity / Apptainer (default image is digest-pinned), or natively on Linux with `--engine native` after `conda install -c conda-forge -c bioconda pggb` |
+| [odgi](https://github.com/pangenome/odgi) | `graph` | taken from the pggb container unless `--odgi` or `$ODGI` is set, or `--engine native` is used |
 | [minimap2](https://github.com/lh3/minimap2) | `regions` (alignment mode) | only when assemblies have no annotation |
 | [BLAST+](https://www.ncbi.nlm.nih.gov/books/NBK279690/) (`blastn`, `makeblastdb`) | `annotate` | optional; without it a 21-mer containment search is used |
-| [samtools](https://github.com/samtools/samtools) | example data, `workflow/subset_bams.sh` | |
+| [samtools](https://github.com/samtools/samtools) | example data, `workflow/subset_bams.sh` | not needed by the `panbreak` commands, which read BAM/CRAM through pysam |
+
+Each binary is looked up in `PATH`, or taken from an environment variable with the upper-case tool
+name (`$ODGI`, `$MINIMAP2`, `$BLASTN`, `$SAMTOOLS`). To see what PanBreak finds on a machine:
+
+```bash
+panbreak check
+panbreak check --require odgi minimap2
+```
+
+`check` lists the Python packages and external tools with their versions and paths, the
+subcommands that need each of them and the available `graph` engines. With `--require` it exits
+with an error if one of the named tools is missing, which is useful at the start of a cluster job.
+
+To run the test suite (unit tests plus a small end-to-end run of `bubbles`, `kmers` and `genotype`
+on a toy graph and generated reads, a few seconds):
+
+```bash
+python -m unittest discover -s tests -v
+```
 
 pggb has no native macOS build. On a Mac, use Docker (e.g. [colima](https://github.com/abiosoft/colima): `colima start --vm-type vz --vz-rosetta`)
 and make sure the project folder is mounted in the VM.
@@ -620,7 +641,7 @@ assemblies with these k-mers gave a recall of 1.0 and 0 false carriers.
 If you use PanBreak, please cite it as:
 
 > Kaya, Y. (2026). *PanBreak: local pangenome graph bubble annotation and junction k-mer genotyping
-> of structural variants and TE insertions from short reads* (Version 0.1.0) [Computer software].
+> of structural variants and TE insertions from short reads* (Version 0.1.1) [Computer software].
 > GitHub. https://github.com/yykaya/PanBreak
 
 ```bibtex
@@ -628,7 +649,7 @@ If you use PanBreak, please cite it as:
   author  = {Kaya, Yasin},
   title   = {PanBreak: local pangenome graph bubble annotation and junction k-mer genotyping of structural variants and TE insertions from short reads},
   year    = {2026},
-  version = {0.1.0},
+  version = {0.1.1},
   url     = {https://github.com/yykaya/PanBreak}
 }
 ```

@@ -141,6 +141,9 @@ def parser():
     pl.add_argument("--max-haplotypes", type=int, default=12, help="haplotypes shown in the flow plot; the rest are pooled [12]")
     pl.add_argument("--formats", nargs="+", default=["png", "pdf"])
     pl.add_argument("-o", "--out", required=True)
+
+    c = sub.add_parser("check", help="report the Python dependencies and external tools that PanBreak can find")
+    c.add_argument("--require", nargs="*", default=[], metavar="TOOL", help="exit with an error if one of these tools is missing")
     return p
 
 
@@ -175,6 +178,9 @@ def main(argv=None):
     elif args.cmd == "plot":
         from .plot import plots
         plots(args)
+    elif args.cmd == "check":
+        from .check import check
+        check(args)
 
 
 if __name__ == "__main__":

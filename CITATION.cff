@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "PanBreak: local pangenome graph bubble annotation and junction k-mer genotyping of structural variants and TE insertions from short reads"
-version: 0.1.0
-date-released: 2026-10-22
+version: 0.1.1
+date-released: 2026-10-31
 license: MIT
 authors:
   - family-names: Kaya
