@@ -2,14 +2,28 @@
 
 [![tests](https://github.com/yykaya/PanBreak/actions/workflows/tests.yml/badge.svg)](https://github.com/yykaya/PanBreak/actions/workflows/tests.yml)
 [![conda](https://github.com/yykaya/PanBreak/actions/workflows/conda.yml/badge.svg)](https://github.com/yykaya/PanBreak/actions/workflows/conda.yml)
-[![version](https://img.shields.io/badge/version-0.1.1-informational)](https://github.com/yykaya/PanBreak/releases)
+[![version](https://img.shields.io/badge/version-0.2.0-informational)](https://github.com/yykaya/PanBreak/releases)
 [![python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![conda](https://img.shields.io/badge/install-conda%20environment-44A833?logo=anaconda&logoColor=white)](environment.yml)
-[![graph](https://img.shields.io/badge/graph-pggb%20%7C%20odgi-6f42c1)](https://github.com/pangenome/pggb)
+[![graph](https://img.shields.io/badge/graph-pggb%20%7C%20minigraph%20%7C%20Minigraph--Cactus-6f42c1)](#other-graph-builders-and-existing-graphs)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![status](https://img.shields.io/badge/status-active%20development-brightgreen)](https://github.com/yykaya/PanBreak/issues)
 
 **Local pangenome graphs → annotated SV bubbles → junction k-mer genotyping of short-read cohorts**
+
+Building pangenome graphs is computationally costly. Whole-genome graphs of many assemblies take
+long runs on large compute nodes, and genotyping short reads against them needs genome-wide graph
+indexes and a new alignment of every sample. When the question concerns one gene or one region,
+most of this effort goes into sequence that is not of interest, and the complex alleles of that
+region (nested TE insertions, tandem copies, highly diverged replacements) are often collapsed,
+filtered or missing in genome-wide graphs and VCFs. Repeating the whole procedure for every new
+locus, or every time new assemblies become available, is rarely practical.
+
+PanBreak is designed to keep this effort small. It builds lightweight graphs of only the targeted
+region, which take seconds to minutes on a laptop or workstation, describes every structural allele
+in them by its sequence, and scales the genotyping to thousands of short-read samples by reading
+their existing alignments directly. The graph can be built with pggb, minigraph or Minigraph-Cactus,
+or imported from an existing graph.
 
 PanBreak builds a pangenome graph of one locus from a set of genome assemblies and calls every
 structural bubble in it. It annotates each bubble (deletions, insertions, transposable elements,
@@ -353,6 +367,15 @@ equally well:
 With minigraph the tandem duplication of `ATG8` is called as a 4.5-kb insertion that is not
 genotypable from junction k-mers (its junctions match the original copy). With Minigraph-Cactus
 the duplication and the adjacent 5.5-kb tandem copy form a single 9-kb insertion.
+
+**These are preliminary results.** They come from the synthetic example, where the true alleles are
+known, and the three builders give highly consistent bubbles and genotypes on it: genotype
+concordance is 99.87 % with minigraph, 99.88 % with Minigraph-Cactus and 99.89 % with pggb, with
+100 % carrier sensitivity and no false carriers in each case. Real loci are more complex than toy
+data, and PanBreak now needs real-world test cases. If you run it on your own locus, with any of
+the builders, please do not hesitate to [open an issue](https://github.com/yykaya/PanBreak/issues)
+and tell us what worked, what did not, or where builders or methods disagree. Reports of failures
+are as useful as reports of success.
 
 ### 3. `panbreak bubbles`: call bubbles by walking every path
 
@@ -704,7 +727,7 @@ assemblies with these k-mers gave a recall of 1.0 and 0 false carriers.
 If you use PanBreak, please cite it as:
 
 > Kaya, Y. (2026). *PanBreak: local pangenome graph bubble annotation and junction k-mer genotyping
-> of structural variants and TE insertions from short reads* (Version 0.1.1) [Computer software].
+> of structural variants and TE insertions from short reads* (Version 0.2.0) [Computer software].
 > GitHub. https://github.com/yykaya/PanBreak
 
 ```bibtex
@@ -712,7 +735,7 @@ If you use PanBreak, please cite it as:
   author  = {Kaya, Yasin},
   title   = {PanBreak: local pangenome graph bubble annotation and junction k-mer genotyping of structural variants and TE insertions from short reads},
   year    = {2026},
-  version = {0.1.1},
+  version = {0.2.0},
   url     = {https://github.com/yykaya/PanBreak}
 }
 ```
