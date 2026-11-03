@@ -77,7 +77,8 @@ def figure_workflow():
         L = 30 + (6 if i == 7 else 0) + (3 if i == 4 else 0) - (2 if i in (1, 2) else 0)
         ax.plot([58, 58 + L * 0.72], [y, y], color=GEN[i], lw=1.6, solid_capstyle="butt")
         ax.text(59 + L * 0.72, y, f"ATG{i + 1}#1#ATG{i + 1}_x", fontsize=5.2, va="center", family="monospace")
-    arrow(ax, 77, 116.5, 77, 111, "panbreak graph  (pggb -p 90 -s 5000; odgi sort, view, viz)", "left")
+    arrow(ax, 77, 116.5, 77, 111, "panbreak graph  (pggb, minigraph or Minigraph-Cactus; odgi sort, view, viz)\n"
+          "or panbreak convert  (existing P-line, W-line or rGFA + GAF graph)", "left")
 
     box(ax, 2, 80, 96, 30, "1  Local pangenome graph")
     nodes = np.linspace(6, 58, 14)
@@ -381,9 +382,63 @@ def figure_gfa():
     plt.close(fig)
 
 
+def figure_formats():
+    fig = plt.figure(figsize=(180 / 25.4, 104 / 25.4))
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 58)
+    ax.axis("off")
+    cols = [
+        ("P lines (GFA 1.0)", "pggb, odgi", [
+            ("H", "VN:Z:1.0", "#555555"), ("S", "1  ACGTTAG", "black"), ("S", "2  C", "black"), ("S", "4  GATTACA", "black"),
+            ("S", "5  TG...CA", TE), ("S", "6  CCATGA", "black"), ("L", "4 + 5 + 0M", TE), ("L", "2 + 6 + 0M", DEL),
+            ("P", "ATG1#1#ATG1_x  1+,2+,4+,6+", GEN[0]), ("P", "ATG3#1#ATG3_x  1+,2+,6+", GEN[2]),
+            ("P", "ATG5#1#ATG5_x  1+,2+,4+,5+,6+", GEN[4])],
+         ["one path per sequence, PanSN name", "kept as they are"]),
+        ("W lines (GFA 1.1)", "Minigraph-Cactus, vg", [
+            ("H", "VN:Z:1.1", "#555555"), ("S", "1  ACGTTAG", "black"), ("S", "2  C", "black"), ("S", "4  GATTACA", "black"),
+            ("S", "5  TG...CA", TE), ("S", "6  CCATGA", "black"), ("L", "4 + 5 + 0M", TE), ("L", "2 + 6 + 0M", DEL),
+            ("W", "ATG1 0 ATG1_x 0 21    >1>2>4>6", GEN[0]), ("W", "ATG3 1 ATG3_x 0 14    >1>2>6", GEN[2]),
+            ("W", "ATG5 1 ATG5_x 0 2121  >1>2>4>5>6", GEN[4])],
+         ["sample, haplotype, contig, start, end, walk", "W ATG5 1 ATG5_x 0 2121 -> P ATG5#1#ATG5_x",
+          "start > 0 or split contig -> name:start-end"]),
+        ("rGFA + GAF", "minigraph", [
+            ("S", "s1 ACGTTAGC SN:Z:ATG1_x SO:i:0  SR:i:0", "black"), ("S", "s2 GATTACA  SN:Z:ATG1_x SO:i:8  SR:i:0", "black"),
+            ("S", "s3 CCATGA   SN:Z:ATG1_x SO:i:15 SR:i:0", "black"), ("S", "s4 TG...CA  SN:Z:ATG5_x SO:i:15 SR:i:1", TE),
+            ("L", "s2 + s4 + 0M", TE), ("L", "s1 + s3 + 0M", DEL), ("", "", "black"), ("", "GAF (minigraph -cxasm --vc)", "#555555"),
+            ("", "ATG3_x 14   0 14   + >s1>s3", GEN[2]), ("", "ATG5_x 2121 0 2121 + >s1>s2>s4>s3", GEN[4])],
+         ["stable coordinates (SN, SO, SR); SV-only graph", "reference path from rank-0 segments (SR:i:0)",
+          "other paths from primary GAF alignments"]),
+    ]
+    xs, w = [1.5, 34.5, 67.5], 31
+    for (title, tools, lines, notes), x in zip(cols, xs):
+        box(ax, x, 21, w, 35.5, fc="#F7F7F7")
+        ax.text(x + 1.2, 55.0, title, fontsize=7.2, fontweight="bold", style="italic", va="top")
+        ax.text(x + 1.2, 52.3, tools, fontsize=5.8, color="#555555", va="top")
+        for i, (t, rest, c) in enumerate(lines):
+            y = 49.2 - i * 2.05
+            ax.text(x + 1.2, y, t, va="top", fontweight="bold", color="#333333", family="monospace", fontsize=4.9)
+            ax.text(x + 3.0 if t else x + 1.2, y, rest, va="top", color=c, family="monospace", fontsize=4.9)
+        for j, n in enumerate(notes):
+            ax.text(x + 1.2, 26.4 - j * 1.9, n, fontsize=5.0, color="#555555", va="top")
+        ax.add_patch(FancyArrowPatch((x + w / 2, 20.6), (50, 15.4), arrowstyle="-|>", mutation_scale=8, color="#555555", lw=0.9,
+                                     connectionstyle="arc3,rad=0"))
+    box(ax, 12, 2, 76, 13, fc="white")
+    ax.text(50, 13.4, "locus.gfa: GFA 1.0, one P line per assembly, sorted with odgi", ha="center", va="top", fontsize=6.6, fontweight="bold")
+    ax.text(50, 10.4, "panbreak graph --builder pggb | minigraph | cactus,  or  panbreak convert [--gaf] [--region]",
+            ha="center", va="top", fontsize=5.3, family="monospace")
+    ax.text(50, 7.4, "paths reversed to the reference orientation; events at unanchored path ends ignored",
+            ha="center", va="top", fontsize=5.6, color="#555555")
+    ax.text(50, 4.9, "-> bubbles, annotate, kmers, genotype, popstats, plot (unchanged)", ha="center", va="top", fontsize=5.6)
+    for f in ("png", "pdf", "svg"):
+        fig.savefig(os.path.join(OUT, f"fig4_gfa_formats.{f}"), dpi=300)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     figure_gfa()
+    figure_formats()
     figure_workflow()
     figure_junctions()
     figure_model()

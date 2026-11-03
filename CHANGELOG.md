@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+- README section on GFA flavours (P lines, W lines, rGFA + GAF) and a figure of the same toy locus in
+  all three formats (`docs/figures/fig4_gfa_formats`).
+- Workflow figure shows the pggb, minigraph and Minigraph-Cactus builders and `panbreak convert`.
+
 ## 0.2.0 (2026-11-03)
 
 ### Added

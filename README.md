@@ -299,6 +299,53 @@ through the graph. The schematic below shows how each class of variation appears
 <p align="center"><img src="docs/figures/fig0_gfa_model.png" width="760"><br>
 <sub>Toy graph with six nodes. Coloured edges and nodes mark the structural alleles; each path lists the nodes an assembly visits.</sub></p>
 
+#### GFA flavours: P lines, W lines and rGFA
+
+Graph builders store the same graph model in three ways. PanBreak reads all of them and turns them
+into the `P`-line locus GFA above (`panbreak graph` and `panbreak convert`).
+
+**GFA 1.0 `P` lines** (pggb, odgi). Each path is a comma-separated list of oriented node IDs, named
+with the [PanSN](https://github.com/pangenome/PanSN-spec) convention `sample#haplotype#contig`.
+
+**GFA 1.1 `W` lines** (Minigraph-Cactus, vg). A walk gives the sample, the haplotype, the contig,
+the start and end of the walk on that contig, and the walk itself as `>`/`<` oriented node IDs:
+
+```text
+W   ATG1   0   ATG1_x   0   21     >1>2>4>6
+W   ATG5   1   ATG5_x   0   2121   >1>2>4>5>6
+```
+
+PanBreak names the converted path `ATG5#1#ATG5_x`. When a walk does not start at position 0, or a
+contig is split into several walks (e.g. clipped Minigraph-Cactus graphs), the coordinates are kept in
+the name (`ATG5#1#ATG5_x:2000-9000`) and used as the path offset. Minigraph-Cactus gives the
+reference haplotype 0 (`ATG1#0#ATG1_x`).
+
+**rGFA** (minigraph). Segments carry stable coordinates instead of paths: `SN` is the sequence the
+segment comes from, `SO` its offset on that sequence and `SR` its rank (0 for the reference, 1 for
+the first assembly that added it, and so on). An rGFA has no assembly paths. The reference path is
+the chain of rank-0 segments ordered by `SO`; the path of every other assembly comes from its
+alignment to the graph in GAF format:
+
+```text
+S   s1   ACGTTAGC   SN:Z:ATG1_x   SO:i:0    SR:i:0
+S   s2   GATTACA    SN:Z:ATG1_x   SO:i:8    SR:i:0
+S   s3   CCATGA     SN:Z:ATG1_x   SO:i:15   SR:i:0
+S   s4   TG...CA    SN:Z:ATG5_x   SO:i:15   SR:i:1
+L   s2   +   s4   +   0M
+L   s1   +   s3   +   0M
+
+ATG3_x   14     0   14     +   >s1>s3          (GAF, minigraph -cxasm --vc)
+ATG5_x   2121   0   2121   +   >s1>s2>s4>s3
+```
+
+PanBreak reads GAF paths written with segment IDs (`--vc`) or with stable coordinates
+(`>ATG1_x:0-15>ATG5_x:15-2115>ATG1_x:15-21`), uses only primary alignments, and renumbers the
+segments for odgi.
+minigraph graphs contain structural variants only (≥ 50 bp by default): there is no SNP bubble.
+
+<p align="center"><img src="docs/figures/fig4_gfa_formats.png" width="760"><br>
+<sub>The same toy locus as P lines, W lines and rGFA + GAF. All three are converted into one P-line locus GFA, sorted with odgi, that every later step reads.</sub></p>
+
 `panbreak plot --gfa` draws the same elements for the real locus graph:
 
 * nodes on the sorted graph coordinate, coloured by how many paths visit them;
@@ -332,7 +379,8 @@ panbreak graph -i 01_regions/locus.fa.gz -r ATG1 -b cactus -e docker -t 8 -o 02_
 minigraph and Minigraph-Cactus do not create cycles for tandem duplications. A tandem copy appears
 as an insertion next to the original copy, and `annotate` labels it `tandem duplication insertion`.
 
-`panbreak convert` turns a graph made elsewhere into a PanBreak locus GFA:
+`panbreak convert` turns a graph made elsewhere into a PanBreak locus GFA (formats described in
+[GFA flavours](#gfa-flavours-p-lines-w-lines-and-rgfa)):
 
 ```bash
 panbreak convert -g graph.gfa.gz -o locus.gfa
