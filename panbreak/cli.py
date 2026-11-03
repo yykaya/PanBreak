@@ -32,11 +32,16 @@ def parser():
     r.add_argument("-t", "--threads", type=int, default=4)
     r.add_argument("-o", "--out", required=True)
 
-    g = sub.add_parser("graph", help="build the local graph with pggb and sort, view and visualise it with odgi")
+    g = sub.add_parser("graph", help="build the local graph (pggb, minigraph or Minigraph-Cactus) and sort, view and visualise it with odgi")
     g.add_argument("-i", "--fasta", required=True, help="bgzipped, indexed PanSN FASTA (locus.fa.gz from 'regions')")
     g.add_argument("-r", "--ref", required=True, help="reference genome (PanSN sample name)")
-    g.add_argument("-e", "--engine", default="docker", choices=["docker", "singularity", "apptainer", "native"])
+    g.add_argument("-b", "--builder", default="pggb", choices=["pggb", "minigraph", "cactus"], help="graph builder [pggb]")
+    g.add_argument("-e", "--engine", default="docker", choices=["docker", "singularity", "apptainer", "native"],
+                   help="how pggb / cactus-pangenome are run; minigraph always runs natively [docker]")
     g.add_argument("--image", default=None, help="pggb container image (digest-pinned default)")
+    g.add_argument("--cactus-image", default=None, help="Minigraph-Cactus container image (digest-pinned default)")
+    g.add_argument("--minigraph-args", default="-l 2000 -d 1000", help="minigraph options for locus-sized sequences, quoted [-l 2000 -d 1000]")
+    g.add_argument("--cactus-args", default="", help="extra cactus-pangenome arguments, quoted")
     g.add_argument("-p", "--identity", type=int, default=90, help="pggb -p [90]")
     g.add_argument("-s", "--segment", type=int, default=5000, help="pggb -s [5000]")
     g.add_argument("-n", "--haplotypes", type=int, default=0, help="pggb -n [number of sequences]")
@@ -47,11 +52,23 @@ def parser():
     g.add_argument("--extend", nargs="*", default=[], metavar="GENOME=BP", help="extra downstream bp for single genomes (e.g. tandem copies beyond the gene)")
     g.add_argument("--odgi", help="odgi binary (default: from the container, or PATH with --engine native)")
     g.add_argument("--layout", action="store_true", help="also compute a 2D layout and drawing")
-    g.add_argument("--skip-pggb", action="store_true", help="reuse an existing pggb/ output")
+    g.add_argument("--skip-build", "--skip-pggb", dest="skip_build", action="store_true", help="reuse the existing builder output (pggb/, minigraph/ or cactus/)")
     g.add_argument("--viz-width", type=int, default=1500)
     g.add_argument("--viz-height", type=int, default=500)
     g.add_argument("-t", "--threads", type=int, default=8)
     g.add_argument("-o", "--out", required=True)
+
+    cv = sub.add_parser("convert", help="turn a pggb, Minigraph-Cactus, vg or minigraph GFA into a PanBreak locus GFA (P-lines, optional locus extraction)")
+    cv.add_argument("-g", "--gfa", required=True, help="input GFA (plain or gzipped): P-lines, W-lines or minigraph rGFA")
+    cv.add_argument("--gaf", nargs="*", help="GAF alignments of the assemblies to a minigraph rGFA (minigraph -cxasm --vc)")
+    cv.add_argument("--region", help="extract a locus with odgi: path:start-end on a reference path, e.g. REF#0#chr1:20000-75000")
+    cv.add_argument("--samples", nargs="*", help="keep only the paths of these samples")
+    cv.add_argument("--min-mapq", type=int, default=0, help="minimum MAPQ of GAF alignments [0]")
+    cv.add_argument("--max-distance", type=int, default=100000, help="odgi extract -d: maximum gap to merge subpaths [100000]")
+    cv.add_argument("--odgi", help="odgi binary [PATH or $ODGI]")
+    cv.add_argument("--keep-intermediate", action="store_true")
+    cv.add_argument("-t", "--threads", type=int, default=4)
+    cv.add_argument("-o", "--out", required=True, help="output GFA")
 
     b = sub.add_parser("bubbles", help="walk every path against the reference path and cluster SV bubbles")
     b.add_argument("-g", "--gfa", required=True, help="locus GFA (graph/locus.gfa)")
@@ -61,7 +78,7 @@ def parser():
     b.add_argument("--tolerance", type=int, default=50, help="breakpoint tolerance for clustering events across genomes [50]")
     b.add_argument("--min-size-ratio", type=float, default=0.8, help="minimum size ratio within a bubble [0.8]")
     b.add_argument("--min-jaccard", type=float, default=0.3, help="minimum 15-mer Jaccard of inserted sequences within a bubble [0.3]")
-    b.add_argument("--cover-pad", type=int, default=200, help="a path must span the bubble +/- this to be genotyped [200]")
+    b.add_argument("--cover-pad", type=int, default=200, help="a path must span the bubble +/- this to be genotyped; events closer to a path end are ignored [200]")
     b.add_argument("--window-flank", type=int, default=60, help="junction window half-width written for k-mer design [60]")
     b.add_argument("--prefix", default="B", help="bubble ID prefix [B]")
     b.add_argument("-o", "--out", required=True)
@@ -153,10 +170,14 @@ def main(argv=None):
         from .regions import extract
         extract(args)
     elif args.cmd == "graph":
-        from .graph import DEFAULT_IMAGE, build
+        from .graph import CACTUS_IMAGE, DEFAULT_IMAGE, build
         args.image = args.image or DEFAULT_IMAGE
+        args.cactus_image = args.cactus_image or CACTUS_IMAGE
         args.extend = kv(args.extend)
         build(args)
+    elif args.cmd == "convert":
+        from .gfa import convert
+        convert(args)
     elif args.cmd == "bubbles":
         from .bubbles import call
         call(args)

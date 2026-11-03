@@ -2,6 +2,7 @@ import csv
 import io
 import os
 import random
+import shutil
 import sys
 import tempfile
 import unittest
@@ -115,6 +116,64 @@ class TestGraph(unittest.TestCase):
             self.assertEqual(sorted((c["type"], len(c["members"])) for c in cl), [("DEL", 1), ("DUP", 1), ("INS", 2)])
 
 
+class TestGFAFormats(unittest.TestCase):
+    def nodes(self):
+        rng = random.Random(3)
+        seq = lambda n: "".join(rng.choice("ACGT") for _ in range(n))
+        return {"1": seq(300), "2": seq(400), "3": seq(300), "4": seq(350), "5": seq(300)}
+
+    def events(self, gfa, ref):
+        g = Graph(gfa)
+        r = Reference(g, ref)
+        return r, {p: [(e["type"], e["a"], e["b"], e["alt_len"]) for e in walk(g, r, p, 50)[1]] for p in g.paths}
+
+    def test_walk_lines(self):
+        from panbreak.gfa import normalise
+        n = self.nodes()
+        with tempfile.TemporaryDirectory() as d:
+            src, out = os.path.join(d, "mc.gfa"), os.path.join(d, "locus.gfa")
+            with open(src, "w") as fh:
+                for k, s in n.items():
+                    fh.write(f"S\t{k}\t{s}\n")
+                fh.write("W\tREF\t0\tchr1\t5000\t6300\t>1>2>3>5\n")
+                fh.write("W\tDEL\t1\tctg1\t0\t900\t>1>3>5\n")
+                fh.write("W\tINS\t2\tctg2\t0\t1650\t<5<4<3<2<1\n")
+            normalise(src, out)
+            r, ev = self.events(out, "REF")
+            self.assertEqual(r.path, "REF#0#chr1:5000-6300")
+            self.assertEqual(r.offset, 5000)
+            self.assertEqual(ev["DEL#1#ctg1"], [("DEL", 5300, 5700, 0)])
+            self.assertEqual(ev["INS#2#ctg2"], [("INS", 6000, 6000, 350)])
+
+    def test_rgfa_gaf(self):
+        from panbreak.gfa import normalise
+        n = self.nodes()
+        sn = {"1": ("REF#1#REF_x", 0, 0), "2": ("REF#1#REF_x", 300, 0), "3": ("REF#1#REF_x", 700, 0),
+              "5": ("REF#1#REF_x", 1000, 0), "4": ("INS#1#INS_x", 300, 1)}
+        with tempfile.TemporaryDirectory() as d:
+            src, gaf, out = os.path.join(d, "g.rgfa"), os.path.join(d, "a.gaf"), os.path.join(d, "locus.gfa")
+            with open(src, "w") as fh:
+                for k, s in n.items():
+                    name, so, sr = sn[k]
+                    fh.write(f"S\ts{k}\t{s}\tLN:i:{len(s)}\tSN:Z:{name}\tSO:i:{so}\tSR:i:{sr}\n")
+                for a, b in [(1, 2), (2, 3), (3, 5), (1, 3), (3, 4), (4, 5)]:
+                    fh.write(f"L\ts{a}\t+\ts{b}\t+\t0M\n")
+            with open(gaf, "w") as fh:
+                fh.write("DEL#1#DEL_x\t900\t0\t900\t+\t>s1>s3>s5\t900\t0\t900\t900\t900\t60\ttp:A:P\n")
+                fh.write("INS#1#INS_x\t1650\t0\t1650\t+\t>REF#1#REF_x:0-1000>INS#1#INS_x:300-650>REF#1#REF_x:1000-1300\t1650\t0\t1650\t1650\t1650\t60\ttp:A:P\n")
+                fh.write("INS#1#INS_x\t1650\t0\t300\t+\t>s1\t300\t0\t300\t300\t300\t5\ttp:A:S\n")
+            normalise(src, out, [gaf])
+            r, ev = self.events(out, "REF")
+            self.assertEqual(r.path, "REF#1#REF_x")
+            self.assertEqual(sorted(ev), ["DEL#1#DEL_x", "INS#1#INS_x", "REF#1#REF_x"])
+            self.assertEqual(ev["DEL#1#DEL_x"], [("DEL", 300, 700, 0)])
+            self.assertEqual(ev["INS#1#INS_x"], [("INS", 1000, 1000, 350)])
+            with open(out) as fh:
+                body = fh.read()
+            self.assertNotIn("\ts1\t", body)
+            self.assertIn("L\t3\t+\t5\t+\t0M", body)
+
+
 class TestModel(unittest.TestCase):
     def test_genotypes(self):
         self.assertEqual(call_gt(0, 20, "biallelic", 1 / 3, OPTS)["GT"], "0/0")
@@ -163,6 +222,27 @@ class TestEndToEnd(unittest.TestCase):
             self.assertEqual({k: v[0] for k, v in gt.items()}, expect)
             self.assertTrue(all(v[1] == "PASS" for v in gt.values()))
             self.assertTrue(os.path.exists(os.path.join(d, "g", "genotypes.vcf.gz")))
+
+    @unittest.skipUnless(shutil.which("minigraph") and shutil.which("odgi"), "minigraph and odgi not installed")
+    def test_minigraph_builder(self):
+        import pysam
+        from panbreak.cli import main
+        rng = random.Random(11)
+        seq = lambda n: "".join(rng.choice("ACGT") for _ in range(n))
+        a, x, b, ins, c = seq(5000), seq(1200), seq(4000), seq(900), seq(5000)
+        genomes = {"R": a + x + b + c, "D": a + b + c, "I": a + x + b + ins + c, "J": a + x + b + ins + c}
+        with tempfile.TemporaryDirectory() as d:
+            fa = os.path.join(d, "locus.fa")
+            with open(fa, "w") as fh:
+                for g, s in genomes.items():
+                    fh.write(f">{g}#1#{g}_x\n{s}\n")
+            pysam.tabix_compress(fa, fa + ".gz")
+            pysam.faidx(fa + ".gz")
+            main(["graph", "-i", fa + ".gz", "-r", "R", "-b", "minigraph", "-t", "1", "-o", os.path.join(d, "g")])
+            main(["bubbles", "-g", os.path.join(d, "g", "locus.gfa"), "-r", "R", "-o", os.path.join(d, "b")])
+            with open(os.path.join(d, "b", "bubbles.tsv")) as fh:
+                rows = [(r["type"], r["carriers"]) for r in csv.DictReader(fh, delimiter="\t")]
+            self.assertEqual(sorted(rows), [("DEL", "D"), ("INS", "I,J")])
 
     def test_check(self):
         from panbreak.cli import main

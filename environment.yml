@@ -11,6 +11,7 @@ dependencies:
   - minimap2>=2.24
   - blast>=2.13
   - odgi>=0.8
+  - minigraph>=0.21
   - pip
   - pip:
       - -e .

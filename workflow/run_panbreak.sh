@@ -17,7 +17,7 @@ if [ -n "${GENE:-}" ]; then
 else
   $PANBREAK regions -a "$ASSEMBLIES" -r "$REF" -L "$REF_LOCUS" -l "$LOCUS" -f "$FLANK" -t "$THREADS" -o "$OUT/01_regions"
 fi
-$PANBREAK graph -i "$OUT/01_regions/locus.fa.gz" -r "$REF" -e "$ENGINE" -t "$THREADS" ${PGGB_ARGS:+--pggb-args "$PGGB_ARGS"} \
+$PANBREAK graph -i "$OUT/01_regions/locus.fa.gz" -r "$REF" -b "${BUILDER:-pggb}" -e "$ENGINE" -t "$THREADS" ${PGGB_ARGS:+--pggb-args "$PGGB_ARGS"} \
   ${TRIM_UP:+--regions "$OUT/01_regions/regions.tsv" --trim-up "$TRIM_UP" --trim-down "${TRIM_DOWN:-$TRIM_UP}"} -o "$OUT/02_graph"
 $PANBREAK bubbles -g "$OUT/02_graph/locus.gfa" -r "$REF" --regions "$OUT/01_regions/regions.tsv" -m "${MIN_SV:-50}" -o "$OUT/03_bubbles"
 $PANBREAK annotate -b "$OUT/03_bubbles" -r "$REF" --regions "$OUT/01_regions/regions.tsv" ${REF_GFF:+--gff "$REF_GFF"} \

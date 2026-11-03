@@ -11,6 +11,7 @@ BAM_REGION=chr1:20000-80000
 SAMPLES=samples.tsv
 GROUP_COL=population
 PLOIDY=2
+BUILDER=pggb
 ENGINE=docker
 THREADS=8
 OUT=panbreak_out

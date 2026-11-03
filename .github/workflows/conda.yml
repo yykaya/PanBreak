@@ -26,7 +26,7 @@ jobs:
       - name: Tools
         run: |
           panbreak --version
-          panbreak check --require minimap2 odgi blastn makeblastdb samtools
+          panbreak check --require minimap2 odgi minigraph blastn makeblastdb samtools
       - name: Unit and end-to-end tests
         run: python -m unittest discover -s tests -v
 

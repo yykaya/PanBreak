@@ -11,8 +11,10 @@ PACKAGES = [("pysam", "pysam"), ("numpy", "numpy"), ("matplotlib", "matplotlib")
 
 TOOLS = [
     ("minimap2", "MINIMAP2", ["--version"], "regions (-L, alignment mode)"),
-    ("odgi", "ODGI", ["version"], "graph (--engine native, --odgi)"),
-    ("pggb", "PGGB", ["--version"], "graph (--engine native)"),
+    ("odgi", "ODGI", ["version"], "graph, convert --region"),
+    ("pggb", "PGGB", ["--version"], "graph (pggb, --engine native)"),
+    ("minigraph", "MINIGRAPH", ["--version"], "graph (--builder minigraph)"),
+    ("cactus-pangenome", "CACTUS_PANGENOME", ["--version"], "graph (--builder cactus, --engine native)"),
     ("docker", "DOCKER", ["--version"], "graph (--engine docker)"),
     ("singularity", "SINGULARITY", ["--version"], "graph (--engine singularity)"),
     ("apptainer", "APPTAINER", ["--version"], "graph (--engine apptainer)"),
@@ -64,9 +66,12 @@ def check(args):
     wid = [max(len(str(r[i])) for r in rows + [head]) for i in range(4)]
     for r in [head] + rows:
         print("  ".join(str(r[i]).ljust(wid[i]) for i in range(4)) + "  " + r[4])
-    engines = [n for n in ("docker", "singularity", "apptainer", "pggb") if find(n, n.upper())]
+    containers = [n for n in ("docker", "singularity", "apptainer") if find(n, n.upper())]
+    builders = [f"pggb ({', '.join(containers + (['native'] if find('pggb', 'PGGB') else [])) or 'not available'})",
+                f"minigraph ({'native' if find('minigraph', 'MINIGRAPH') else 'not available'})",
+                f"cactus ({', '.join(containers + (['native'] if find('cactus-pangenome', 'CACTUS_PANGENOME') else [])) or 'not available'})"]
     print()
-    print("graph engines available:", ", ".join("native" if e == "pggb" else e for e in engines) or "none")
+    print("graph builders:", "; ".join(builders))
     unknown = [n for n in args.require or [] if n not in {t[0] for t in TOOLS}]
     if unknown:
         print("unknown tool(s) in --require:", ", ".join(unknown), file=sys.stderr)

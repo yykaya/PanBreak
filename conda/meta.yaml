@@ -26,6 +26,7 @@ requirements:
     - matplotlib-base >=3.5
     - minimap2 >=2.24
     - odgi >=0.8
+    - minigraph >=0.21
 
 test:
   source_files:
@@ -35,7 +36,7 @@ test:
   commands:
     - panbreak --version
     - panbreak --help
-    - panbreak check --require minimap2 odgi
+    - panbreak check --require minimap2 odgi minigraph
     - python -m unittest discover -s tests -v
 
 about:

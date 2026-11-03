@@ -33,6 +33,16 @@ class Graph:
     def path_seq(self, p):
         return "".join(self.node(n, o) for n, o in self.paths[p])
 
+    def orient_to(self, ref):
+        n = 0
+        for p, steps in self.paths.items():
+            same = sum(len(self.seq[x]) for x, o in steps if x in ref.orient and o == ref.orient[x])
+            opp = sum(len(self.seq[x]) for x, o in steps if x in ref.orient and o != ref.orient[x])
+            if opp > same:
+                self.paths[p] = [(x, "-" if o == "+" else "+") for x, o in reversed(steps)]
+                n += 1
+        return n
+
     def genomes(self):
         out = defaultdict(list)
         for p, i in self.info.items():
@@ -57,6 +67,7 @@ class Reference:
             x += len(graph.seq[n])
         self.seq = graph.path_seq(self.path)
         self.end = x
+        self.flipped = graph.orient_to(self)
 
     def at(self, a, b):
         a, b = max(a, self.offset), min(b, self.end)
@@ -162,8 +173,11 @@ def call(args):
     graph = Graph(args.gfa)
     ref = Reference(graph, args.ref)
     log(f"graph: {len(graph.seq)} nodes, {len(graph.paths)} paths; reference path {ref.path} ({len(ref.seq)} bp, offset {ref.offset})")
+    if ref.flipped:
+        log(f"{ref.flipped} path(s) run against the reference orientation and were reversed")
     walks, events, bmaps = {}, [], {}
     spans = defaultdict(list)
+    edge = 0
     for p in graph.paths:
         g = graph.info[p]["sample"]
         s, evs, span, bm = walk(graph, ref, p, args.min_sv)
@@ -172,10 +186,15 @@ def call(args):
         if span:
             spans[g].append(span)
         for e in evs:
+            if e["i0"] < args.cover_pad or len(s) - e["i1"] < args.cover_pad:
+                edge += 1
+                continue
             e.update({"genome": g, "path": p})
             e["alt_seq"] = s[e["i0"]:e["i1"]]
             e["kmers"] = kmer_set(e["alt_seq"]) if e["type"] in ("INS", "REPL", "INV") else set()
             events.append(e)
+    if edge:
+        log(f"{edge} path event(s) within {args.cover_pad} bp of a path end ignored (unanchored sequence ends)")
     if not events:
         log("no structural differences >= min_sv relative to the reference")
     clusters = cluster_events(events, args.tolerance, args.min_size_ratio, args.min_jaccard)

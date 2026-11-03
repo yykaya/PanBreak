@@ -22,6 +22,8 @@ haplotypes that can be traced back to the assemblies.
 
 PanBreak is a downstream genotyping module for pggb/odgi locus graphs. It complements graph
 genotypers such as vg and PanGenie; it is not part of, or an official extension of, either project.
+Locus graphs can also be built with minigraph or Minigraph-Cactus, and existing GFA files from these
+tools or from vg can be imported (see [Other graph builders and existing graphs](#other-graph-builders-and-existing-graphs)).
 Feedback from the pggb, odgi and vg developers is welcome via GitHub issues.
 
 PanBreak is under active development. Suggestions, bug reports and feature requests are very
@@ -152,7 +154,9 @@ PanBreak itself needs only Python 3.10–3.13 with `pysam`, `numpy` and `matplot
 | Tool | Used by | Notes |
 |---|---|---|
 | [pggb](https://github.com/pangenome/pggb) | `graph` | run through Docker / Singularity / Apptainer (default image is digest-pinned), or natively on Linux with `--engine native` after `conda install -c conda-forge -c bioconda pggb` |
-| [odgi](https://github.com/pangenome/odgi) | `graph` | taken from the pggb container unless `--odgi` or `$ODGI` is set, or `--engine native` is used |
+| [odgi](https://github.com/pangenome/odgi) | `graph`, `convert --region` | taken from the pggb container unless `--odgi` or `$ODGI` is set, or `--engine native` is used; found in `PATH` for the minigraph and cactus builders |
+| [minigraph](https://github.com/lh3/minigraph) | `graph --builder minigraph` | native on Linux and macOS, part of the conda environment |
+| [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus) (`cactus-pangenome`) | `graph --builder cactus` | run through Docker / Singularity / Apptainer (default image is digest-pinned) or a native install |
 | [minimap2](https://github.com/lh3/minimap2) | `regions` (alignment mode) | only when assemblies have no annotation |
 | [BLAST+](https://www.ncbi.nlm.nih.gov/books/NBK279690/) (`blastn`, `makeblastdb`) | `annotate` | optional; without it a 21-mer containment search is used |
 | [samtools](https://github.com/samtools/samtools) | example data, `workflow/subset_bams.sh` | not needed by the `panbreak` commands, which read BAM/CRAM through pysam |
@@ -293,6 +297,62 @@ through the graph. The schematic below shows how each class of variation appears
 
 <p align="center"><img src="docs/figures/example_odgi_viz.png" width="700"><br>
 <sub>The corresponding <code>odgi viz</code> image written by <code>panbreak graph</code>.</sub></p>
+
+### Other graph builders and existing graphs
+
+`panbreak graph --builder` selects how the locus graph is built. All builders write the same
+`02_graph/locus.gfa` (GFA 1.0 with one `P` line per assembly, sorted with odgi), so every later step
+is identical.
+
+```bash
+panbreak graph -i 01_regions/locus.fa.gz -r ATG1 -b minigraph -t 8 -o 02_graph
+panbreak graph -i 01_regions/locus.fa.gz -r ATG1 -b cactus -e docker -t 8 -o 02_graph
+```
+
+| Builder | What runs | Notes |
+|---|---|---|
+| `pggb` (default) | `pggb`, then odgi | all-vs-all alignment; base-level graph; tandem copies become loops (`DUP`) |
+| `minigraph` | `minigraph -cxggs` on the assemblies (reference first), `minigraph -cxasm --vc` of every assembly to the graph, then odgi | runs natively, also on macOS; structural variants only (≥ 50 bp), so SNPs and small indels are not in the graph; `--minigraph-args` defaults to `-l 2000 -d 1000` for locus-sized sequences |
+| `cactus` | `cactus-pangenome --gfa full` with the reference as `--reference`, then odgi | base-level graph; assemblies are listed as haplotype 1, the reference as haplotype 0 (`ATG1#0#ATG1_x`) |
+
+minigraph and Minigraph-Cactus do not create cycles for tandem duplications. A tandem copy appears
+as an insertion next to the original copy, and `annotate` labels it `tandem duplication insertion`.
+
+`panbreak convert` turns a graph made elsewhere into a PanBreak locus GFA:
+
+```bash
+panbreak convert -g graph.gfa.gz -o locus.gfa
+panbreak convert -g graph.gfa.gz --region 'ATG1#0#chr1:20000-75000' -t 8 -o locus.gfa
+panbreak convert -g graph.rgfa --gaf ATG2.gaf ATG3.gaf -o locus.gfa
+```
+
+* `P` lines (pggb, odgi) are kept. `W` lines (Minigraph-Cactus, vg) become `P` lines named
+  `sample#haplotype#contig`, with `:start-end` when the walk does not start at 0 or the contig is split.
+* A minigraph rGFA has no assembly paths. The reference paths are rebuilt from the rank-0 segments
+  (`SN`/`SO`/`SR` tags), and the paths of the other assemblies are read from their GAF alignments
+  (`minigraph -cxasm --vc`; stable-coordinate GAF paths are also accepted). Only primary alignments
+  are used.
+* `--region` extracts a locus from a chromosome- or genome-scale graph with
+  `odgi build`, `odgi extract -r` and `odgi sort`. The region is given on a reference path.
+* `--samples` keeps only the paths of the listed samples.
+* For a vg graph, export GFA first, e.g. `vg convert -f graph.gbz > graph.gfa`.
+
+`bubbles` reverses paths that run against the reference orientation and ignores path events within
+`--cover-pad` bp (200) of a path end. Graphs built from sequences of slightly different extent
+anchor the sequence ends to each other, which would otherwise look like deletions or insertions.
+
+On the ATG1–ATG8 example, the three builders find the same structural alleles and genotype them
+equally well:
+
+| Builder | Bubbles | Genotypable | Concordance (PASS calls) | Carrier sensitivity | False carriers |
+|---|---|---|---|---|---|
+| pggb | 9 (4 DEL, 4 INS, 1 DUP) | 9 | 99.89 % | 100 % | 0 |
+| minigraph | 9 (4 DEL, 5 INS) | 8 | 99.87 % | 100 % | 0 |
+| Minigraph-Cactus | 8 (4 DEL, 4 INS) | 8 | 99.88 % | 100 % | 0 |
+
+With minigraph the tandem duplication of `ATG8` is called as a 4.5-kb insertion that is not
+genotypable from junction k-mers (its junctions match the original copy). With Minigraph-Cactus
+the duplication and the adjacent 5.5-kb tandem copy form a single 9-kb insertion.
 
 ### 3. `panbreak bubbles`: call bubbles by walking every path
 
@@ -624,7 +684,10 @@ assemblies with these k-mers gave a recall of 1.0 and 0 false carriers.
   largest TE you expect to align. Check `locus_1D.png` before trusting the bubble calls.
 * **Collapsed repeats and tandem copies.** pggb may represent multi-copy tandem arrays as
   loops plus insertions. PanBreak links them (`linked`), but copy numbers from short reads are
-  estimates.
+  estimates. minigraph and Minigraph-Cactus represent tandem copies as insertions.
+* **minigraph graphs.** minigraph keeps only structural variation, so allele sequences and junction
+  windows carry the reference base at SNPs and small indels. Use pggb or Minigraph-Cactus when
+  base-level allele sequences matter (e.g. TSDs, LTR identity).
 * **Multi-copy junctions.** For TE-rich genomes, run `kmers --background` with whole-genome
   assemblies of a few non-carriers. This removes junction k-mers that also occur elsewhere in the
   genome, e.g. at older insertions of the same family next to similar host sequence.
@@ -668,6 +731,8 @@ Graph construction and manipulation (used by `panbreak graph`):
 * **seqwish.** Garrison E, Guarracino A. Unbiased pangenome graphs. *Bioinformatics* **39**, btac743 (2023). doi:[10.1093/bioinformatics/btac743](https://doi.org/10.1093/bioinformatics/btac743)
 * **wfmash / WFA.** <https://github.com/waveygang/wfmash>; Marco-Sola S, Moure JC, Moreto M, Espinosa A. Fast gap-affine pairwise alignment using the wavefront algorithm. *Bioinformatics* **37**, 456–463 (2021). doi:[10.1093/bioinformatics/btaa777](https://doi.org/10.1093/bioinformatics/btaa777)
 * **smoothxg.** <https://github.com/pangenome/smoothxg>
+* **minigraph.** Li H, Feng X, Chu C. The design and construction of reference pangenome graphs with minigraph. *Genome Biol* **21**, 265 (2020). doi:[10.1186/s13059-020-02168-z](https://doi.org/10.1186/s13059-020-02168-z)
+* **Minigraph-Cactus.** Hickey G, Monlong J, Ebler J, *et al.* Pangenome graph construction from genome alignments with Minigraph-Cactus. *Nat Biotechnol* **42**, 663–673 (2024). doi:[10.1038/s41587-023-01793-w](https://doi.org/10.1038/s41587-023-01793-w)
 
 Alignment, sequence and annotation tools:
 
